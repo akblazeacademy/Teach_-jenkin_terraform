@@ -4,7 +4,7 @@ pipeline {
     parameters {
         choice(
             name: 'ENV',
-            choices: ['dev', 'qa', 'prod'],
+            choices: ['dev', 'qa1', 'prod'],
             description: 'Select the environment'
         )
         string(name: 'RG_NAME', defaultValue: 'myRG', description: 'Resource Group Name')
