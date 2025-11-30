@@ -17,7 +17,6 @@ pipeline {
             description: 'Choose Terraform Action'
         )
 
-        /** NEW — SERVICE PRINCIPAL INPUTS */
         string(name: 'ARM_SUBSCRIPTION_ID', defaultValue: '', description: 'Azure Subscription ID')
         string(name: 'ARM_CLIENT_ID', defaultValue: '', description: 'Azure SP App ID')
         password(name: 'ARM_CLIENT_SECRET', defaultValue: '', description: 'Azure SP Client Secret')
@@ -27,7 +26,9 @@ pipeline {
     environment {
         STORAGE_ACCOUNT = "blazeungabungawarrison"
         LOCATION        = "eastus"
-        MODULE_PATH     = "/home/azure/Teach_Terraform"
+
+        // IMPORTANT FIX
+        MODULE_PATH     = "${WORKSPACE}/terraform"
     }
 
     stages {
@@ -53,7 +54,6 @@ pipeline {
                 export ARM_CLIENT_ID='${params.ARM_CLIENT_ID}'
                 export ARM_CLIENT_SECRET='${params.ARM_CLIENT_SECRET}'
                 export ARM_TENANT_ID='${params.ARM_TENANT_ID}'
-                printenv | grep ARM
                 """
             }
         }
@@ -61,6 +61,7 @@ pipeline {
         stage("Terraform Init") {
             steps {
                 dir("${MODULE_PATH}") {
+
                     sh """
                     cat > backend.tf <<EOF
                     terraform {
@@ -84,10 +85,10 @@ pipeline {
                 dir("${MODULE_PATH}") {
                     sh """
                         terraform plan \
-                        -var rg_name=${params.RG_NAME} \
-                        -var vnet_name=${params.VNET_NAME} \
-                        -var subnet_name=${params.SUBNET_NAME} \
-                        -var environment=${params.ENV}
+                          -var rg_name=${params.RG_NAME} \
+                          -var vnet_name=${params.VNET_NAME} \
+                          -var subnet_name=${params.SUBNET_NAME} \
+                          -var environment=${params.ENV}
                     """
                 }
             }
@@ -101,10 +102,10 @@ pipeline {
                 dir("${MODULE_PATH}") {
                     sh """
                         terraform apply -auto-approve \
-                        -var rg_name=${params.RG_NAME} \
-                        -var vnet_name=${params.VNET_NAME} \
-                        -var subnet_name=${params.SUBNET_NAME} \
-                        -var environment=${params.ENV}
+                          -var rg_name=${params.RG_NAME} \
+                          -var vnet_name=${params.VNET_NAME} \
+                          -var subnet_name=${params.SUBNET_NAME} \
+                          -var environment=${params.ENV}
                     """
                 }
             }
