@@ -1,0 +1,106 @@
+pipeline {
+    agent any
+
+    parameters {
+        choice(
+            name: 'ENV',
+            choices: ['dev', 'qa', 'prod'],
+            description: 'Select the environment'
+        )
+        string(name: 'RG_NAME', defaultValue: 'myRG', description: 'Resource Group Name')
+        string(name: 'VNET_NAME', defaultValue: 'myVNet', description: 'VNET Name')
+        string(name: 'SUBNET_NAME', defaultValue: 'mySubnet', description: 'Subnet Name')
+
+        choice(
+            name: 'ACTION',
+            choices: [
+                'init-plan',
+                'init-plan-apply'
+            ],
+            description: 'Choose Terraform Action'
+        )
+    }
+
+    environment {
+        STORAGE_ACCOUNT = "blazeungabungawarrison"
+        LOCATION        = "eastus"
+        MODULE_PATH     = "${WORKSPACE}/terraform"
+
+        // Set your Azure SP details here
+        ARM_SUBSCRIPTION_ID = "<YOUR_SUB_ID>"
+        ARM_CLIENT_ID       = "<YOUR_APP_ID>"
+        ARM_CLIENT_SECRET   = "<YOUR_SP_PASSWORD>"
+        ARM_TENANT_ID       = "<YOUR_TENANT_ID>"
+    }
+
+    stages {
+
+        stage("Show Inputs") {
+            steps {
+                echo "Environment: ${params.ENV}"
+                echo "RG Name: ${params.RG_NAME}"
+                echo "VNET Name: ${params.VNET_NAME}"
+                echo "Subnet Name: ${params.SUBNET_NAME}"
+                echo "Action: ${params.ACTION}"
+            }
+        }
+
+        stage("Create backend.tf") {
+            steps {
+                dir("${MODULE_PATH}") {
+                    sh """
+                    cat > backend.tf <<EOF
+                    terraform {
+                      backend "azurerm" {
+                        resource_group_name  = "STATE-RG"
+                        storage_account_name = "${STORAGE_ACCOUNT}"
+                        container_name       = "${params.ENV}"
+                        key                  = "${params.ENV}.tfstate"
+                      }
+                    }
+                    EOF
+                    """
+                }
+            }
+        }
+
+        stage("Terraform Init") {
+            steps {
+                dir("${MODULE_PATH}") {
+                    sh "terraform init -upgrade"
+                }
+            }
+        }
+
+        stage("Terraform Plan") {
+            steps {
+                dir("${MODULE_PATH}") {
+                    sh """
+                        terraform plan \
+                        -var rg_name=${params.RG_NAME} \
+                        -var vnet_name=${params.VNET_NAME} \
+                        -var subnet_name=${params.SUBNET_NAME} \
+                        -var environment=${params.ENV}
+                    """
+                }
+            }
+        }
+
+        stage("Terraform Apply (Optional)") {
+            when {
+                expression { params.ACTION == "init-plan-apply" }
+            }
+            steps {
+                dir("${MODULE_PATH}") {
+                    sh """
+                        terraform apply -auto-approve \
+                        -var rg_name=${params.RG_NAME} \
+                        -var vnet_name=${params.VNET_NAME} \
+                        -var subnet_name=${params.SUBNET_NAME} \
+                        -var environment=${params.ENV}
+                    """
+                }
+            }
+        }
+    }
+}
