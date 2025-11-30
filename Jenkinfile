@@ -17,17 +17,20 @@ pipeline {
             description: 'Choose Terraform Action'
         )
 
+        // Azure Service Principal Inputs
         string(name: 'ARM_SUBSCRIPTION_ID', defaultValue: '', description: 'Azure Subscription ID')
         string(name: 'ARM_CLIENT_ID', defaultValue: '', description: 'Azure SP App ID')
-        password(name: 'ARM_CLIENT_SECRET', defaultValue: '', description: 'Azure SP Client Secret')
+        password(name: 'ARM_CLIENT_SECRET', defaultValue: '', description: 'Azure SP Secret')
         string(name: 'ARM_TENANT_ID', defaultValue: '', description: 'Azure Tenant ID')
     }
 
     environment {
+        // Backend Configuration
         STORAGE_ACCOUNT = "blazeungabungawarrison"
-        LOCATION        = "eastus"
+        STATE_RG        = "MyResourceGroup"
+        LOCATION        = "centralus"
 
-        // IMPORTANT FIX
+        // IMPORTANT! Terraform module path from GitHub repository
         MODULE_PATH     = "${WORKSPACE}/terraform"
     }
 
@@ -35,46 +38,52 @@ pipeline {
 
         stage("Show Inputs") {
             steps {
+                echo "================= USER INPUTS ================="
                 echo "Environment: ${params.ENV}"
                 echo "RG Name: ${params.RG_NAME}"
                 echo "VNET Name: ${params.VNET_NAME}"
                 echo "Subnet Name: ${params.SUBNET_NAME}"
                 echo "Action: ${params.ACTION}"
-
-                echo "Using Subscription: ${params.ARM_SUBSCRIPTION_ID}"
-                echo "Using App ID: ${params.ARM_CLIENT_ID}"
-                echo "Using Tenant ID: ${params.ARM_TENANT_ID}"
+                echo "Subscription: ${params.ARM_SUBSCRIPTION_ID}"
+                echo "App ID: ${params.ARM_CLIENT_ID}"
+                echo "Tenant ID: ${params.ARM_TENANT_ID}"
+                echo "==============================================="
             }
         }
 
         stage("Export Azure Credentials") {
             steps {
-                sh """
-                export ARM_SUBSCRIPTION_ID='${params.ARM_SUBSCRIPTION_ID}'
-                export ARM_CLIENT_ID='${params.ARM_CLIENT_ID}'
-                export ARM_CLIENT_SECRET='${params.ARM_CLIENT_SECRET}'
-                export ARM_TENANT_ID='${params.ARM_TENANT_ID}'
-                """
+                sh '''
+                export ARM_SUBSCRIPTION_ID='${ARM_SUBSCRIPTION_ID}'
+                export ARM_CLIENT_ID='${ARM_CLIENT_ID}'
+                export ARM_CLIENT_SECRET='${ARM_CLIENT_SECRET}'
+                export ARM_TENANT_ID='${ARM_TENANT_ID}'
+                '''
+            }
+        }
+
+        stage("Write backend.tf") {
+            steps {
+                dir("${MODULE_PATH}") {
+                    sh '''
+cat > backend.tf <<EOF
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "${STATE_RG}"
+    storage_account_name = "${STORAGE_ACCOUNT}"
+    container_name       = "${ENV}"
+    key                  = "${ENV}.tfstate"
+  }
+}
+EOF
+                    '''
+                }
             }
         }
 
         stage("Terraform Init") {
             steps {
                 dir("${MODULE_PATH}") {
-
-                    sh """
-                    cat > backend.tf <<EOF
-                    terraform {
-                      backend "azurerm" {
-                        resource_group_name  = "STATE-RG"
-                        storage_account_name = "${STORAGE_ACCOUNT}"
-                        container_name       = "${params.ENV}"
-                        key                  = "${params.ENV}.tfstate"
-                      }
-                    }
-                    EOF
-                    """
-
                     sh "terraform init -upgrade"
                 }
             }
@@ -84,11 +93,11 @@ pipeline {
             steps {
                 dir("${MODULE_PATH}") {
                     sh """
-                        terraform plan \
-                          -var rg_name=${params.RG_NAME} \
-                          -var vnet_name=${params.VNET_NAME} \
-                          -var subnet_name=${params.SUBNET_NAME} \
-                          -var environment=${params.ENV}
+                    terraform plan \
+                      -var rg_name=${RG_NAME} \
+                      -var vnet_name=${VNET_NAME} \
+                      -var subnet_name=${SUBNET_NAME} \
+                      -var environment=${ENV}
                     """
                 }
             }
@@ -101,11 +110,11 @@ pipeline {
             steps {
                 dir("${MODULE_PATH}") {
                     sh """
-                        terraform apply -auto-approve \
-                          -var rg_name=${params.RG_NAME} \
-                          -var vnet_name=${params.VNET_NAME} \
-                          -var subnet_name=${params.SUBNET_NAME} \
-                          -var environment=${params.ENV}
+                    terraform apply -auto-approve \
+                      -var rg_name=${RG_NAME} \
+                      -var vnet_name=${VNET_NAME} \
+                      -var subnet_name=${SUBNET_NAME} \
+                      -var environment=${ENV}
                     """
                 }
             }
